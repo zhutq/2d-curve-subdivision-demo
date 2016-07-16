@@ -1,0 +1,158 @@
+<!-- MIT License
+
+Copyright (c) 2016 Tianqian Zhu
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. -->
+
+<!DOCTYPE html>
+<html>
+<body>
+
+
+<canvas id="pointCanvas" width="600" height="480" style="border:1px solid #000000;" oncontextmenu="return false;"></canvas>
+<br/>
+<button onclick="clearPoints()">Clear</button>
+
+<select id="subdivisionMask" onchange="onMaskChange()">
+    <option value="cubicBSpline">Cubic B-Spline (1 2 1)</option>
+    <option value="Chaikin">Chaikin’s (1 1)</option>
+    <option value="DLG">DLG</option>
+</select>
+
+<p>
+<a href="https://www.cs.utexas.edu/~fussell/courses/cs384g/lectures/lecture17-Subdivision_curves.pdf">Reference: lecture17-Subdivision_curves.pdf </a>
+</p>
+
+<script src="victor.min.js"></script>
+<script>
+
+var canvas = document.getElementById('pointCanvas');
+canvas.addEventListener("mousedown", canvasMouseDown, false);
+
+var context = canvas.getContext('2d');
+var points = [];
+var refined = [];
+
+function onMaskChange() {
+    refined = [];
+    draw();
+}
+
+function drawPolygon(points) {
+    for (var i = 0; i < points.length; i++) {
+        var point = points[i];
+        context.fillRect(point.x - 3, point.y - 3, 5, 5);
+    }
+    if (points.length > 1) {
+        context.beginPath();
+        context.moveTo(points[0].x, points[0].y);
+        for (var i = 1; i < points.length; i++) {
+            context.lineTo(points[i].x, points[i].y);
+        }
+        if (points.length >= 3) {
+            context.lineTo(points[0].x, points[0].y);
+        }
+        context.stroke();
+    }
+}
+
+function draw() {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#FF0000";
+    context.strokeStyle = "#FF0000";
+    drawPolygon(points);
+    context.fillStyle = "#0000FF";
+    context.strokeStyle = "#0000FF";
+    drawPolygon(refined);
+};
+
+function canvasMouseDown(event) {
+    if (event.button == 0) {
+        var rect = canvas.getBoundingClientRect();
+        var x = event.clientX - rect.left;
+        var y = event.clientY - rect.top;
+        var vec = new Victor(x, y);
+        points.push(vec);
+        refined = [];
+    } else if (event.button == 1) {
+        points.pop();
+        refined = [];
+    } else if (event.button == 2) {
+        refine();
+    }
+    draw();
+    event.preventDefault();
+};
+
+function refine() {
+    if (points.length >= 3) {
+        if (refined.length == 0) {
+            for (var i = 0; i < points.length; i++) {
+                refined.push(points[i].clone());
+            }
+        }
+
+        // split
+        var splitted = [];
+        for (var i = 0; i < refined.length; i++) {
+            splitted.push(refined[i]);
+            var next = (i + 1) % refined.length;
+            var vec = refined[i].clone().add(refined[next]).divide(new Victor(2.0, 2.0));
+            splitted.push(vec);
+        }
+        var averaged = splitted.slice();
+        // average
+        for (var i = 0; i < splitted.length; i++) {
+            var prev = ((i - 1) + splitted.length) % splitted.length;
+            var next = (i + 1) % splitted.length;
+
+            var e = document.getElementById("subdivisionMask");
+            var value = e.options[e.selectedIndex].value;
+            if (value === "cubicBSpline") {
+                averaged[i] = splitted[i].clone().multiply(new Victor(2.0, 2.0)).add(splitted[prev]).add(splitted[next]).divide(new Victor(4.0, 4.0));
+            } else if (value === "Chaikin") {
+                averaged[i] = splitted[i].clone().add(splitted[next]).divide(new Victor(2.0, 2.0));
+            } else if (value == "DLG") {
+                var iteration = splitted.length / points.length;
+                if ((i % iteration) != 0) { // skip original points
+                    var prev2 = ((i - 2) + splitted.length) % splitted.length;
+                    var next2 = (i + 2) % splitted.length;
+                    averaged[i] = splitted[i].clone().multiply(new Victor(10.0, 10.0))
+                        .add(splitted[prev2].clone().multiply(new Victor(-2.0, -2.0)))
+                        .add(splitted[prev].clone().multiply(new Victor(5.0, 5.0)))
+                        .add(splitted[next].clone().multiply(new Victor(5.0, 5.0)))
+                        .add(splitted[next2].clone().multiply(new Victor(-2.0, -2.0)))
+                        .divide(new Victor(16.0, 16.0));
+                }
+            }
+        }
+        refined = averaged;
+    }
+}
+
+function clearPoints() {
+    points = [];
+    refined = [];
+    draw();
+};
+
+</script>
+
+</body>
+</html>
